@@ -1,23 +1,60 @@
 class SmartTrainerPro {
     constructor() {
+        // تهيئة Supabase
+        this.supabase = window.supabase.createClient(
+            'https://ilopoevhgkgepumjsmid.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlsb3BvZXZoZ2tnZXB1bWpzbWlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjQ5NDAsImV4cCI6MjA4NDE0MDk0MH0.LnJN5o9MqSLodN1PXwRLIBuDWUiZ-9rGb1CLdz3fdt8'
+        );
+        
         this.loadAllData();
         this.init();
     }
 
-    loadAllData() {
-        this.dailyMeals = JSON.parse(localStorage.getItem('dailyMeals')) || [];
-        this.waterData = JSON.parse(localStorage.getItem('waterData')) || {
-            today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0]
-        };
-        this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || {
-            name: '', age: '', height: '', weight: '', targetCalories: 2000
-        };
-        this.vitalsData = JSON.parse(localStorage.getItem('vitalsData')) || [];
-        this.progressPhotos = JSON.parse(localStorage.getItem('progressPhotos')) || [];
+    async loadAllData() {
+        try {
+            // تحميل البيانات من Supabase
+            const { data: meals } = await this.supabase.from('meals').select('*');
+            this.dailyMeals = meals || [];
+            
+            const { data: water } = await this.supabase.from('water').select('*');
+            this.waterData = water?.[0] || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
+            
+            const { data: profile } = await this.supabase.from('profile').select('*');
+            this.userProfile = profile?.[0] || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+            
+            const { data: vitals } = await this.supabase.from('vitals').select('*');
+            this.vitalsData = vitals || [];
+            
+            const { data: photos } = await this.supabase.from('photos').select('*');
+            this.progressPhotos = photos || [];
+        } catch (error) {
+            console.log('Using localStorage fallback:', error);
+            // Fallback لـ localStorage
+            this.dailyMeals = JSON.parse(localStorage.getItem('dailyMeals')) || [];
+            this.waterData = JSON.parse(localStorage.getItem('waterData')) || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
+            this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+            this.vitalsData = JSON.parse(localStorage.getItem('vitalsData')) || [];
+            this.progressPhotos = JSON.parse(localStorage.getItem('progressPhotos')) || [];
+        }
     }
 
-    saveData(key, data) {
+    async saveData(key, data) {
+        // حفظ في localStorage كنسخة احتياطية
         localStorage.setItem(key, JSON.stringify(data));
+        
+        // حفظ في Supabase
+        try {
+            if (key === 'dailyMeals') {
+                await this.supabase.from('meals').upsert(data.map(m => ({ ...m, id: m.id || undefined })));
+            } else if (key === 'waterData') {
+                await this.supabase.from('water').upsert([data]);
+            } else if (key === 'userProfile') {
+                await this.supabase.from('profile').upsert([data]);
+            }
+        } catch (error) {
+            console.log('Supabase save error:', error);
+        }
+        
         this.updateHomeSummary();
     }
 
