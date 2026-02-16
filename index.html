@@ -10,8 +10,65 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+    <!-- Authentication Modal -->
+    <div id="authModal" class="auth-modal">
+        <div class="auth-container">
+            <div class="auth-header">
+                <h2>🏋️ المدرب الذكي Pro</h2>
+                <p>سجل دخولك أو أنشئ حساب جديد</p>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">تسجيل دخول</button>
+                <button class="auth-tab" data-tab="register">إنشاء حساب</button>
+            </div>
+            
+            <form id="loginForm" class="auth-form">
+                <div class="form-group">
+                    <label>📧 البريد الإلكتروني</label>
+                    <input type="email" id="loginEmail" placeholder="بريدك الإلكتروني" required>
+                </div>
+                <div class="form-group">
+                    <label>🔑 كلمة المرور</label>
+                    <input type="password" id="loginPassword" placeholder="كلمة المرور" required>
+                </div>
+                <button type="submit" class="save-btn" style="width:100%;">دخول</button>
+            </form>
+            
+            <form id="registerForm" class="auth-form" style="display:none;">
+                <div class="form-group">
+                    <label>👤 الاسم</label>
+                    <input type="text" id="registerName" placeholder="اسمك">
+                </div>
+                <div class="form-group">
+                    <label>📧 البريد الإلكتروني</label>
+                    <input type="email" id="registerEmail" placeholder="بريدك الإلكتروني" required>
+                </div>
+                <div class="form-group">
+                    <label>🔑 كلمة المرور</label>
+                    <input type="password" id="registerPassword" placeholder="كلمة المرور" required minlength="6">
+                </div>
+                <button type="submit" class="save-btn" style="width:100%;">إنشاء حساب</button>
+            </form>
+            
+            <div class="auth-footer">
+                    <button class="guest-btn" id="guestBtn">دخول كضيف (حفظ محلي)</button>
+                    <p style="text-align:center; margin-top:15px; color:var(--text-muted);">
+                        <a href="register.html" style="color:var(--primary);">إنشاء حساب</a> | 
+                        <a href="login.html" style="color:var(--secondary);">تسجيل دخول</a>
+                    </p>
+                </div>
+            
+            <div id="authError" class="auth-error"></div>
+        </div>
+    </div>
+    
     <div id="app">
         <header>
+            <div class="user-info" id="userInfo" style="display:none;">
+                <span id="userNameDisplay"></span>
+                <button class="logout-btn" id="logoutBtn">خروج</button>
+            </div>
             <h1>🏋️ المدرب الذكي Pro</h1>
             <nav>
                 <button class="nav-btn active" data-section="home">الرئيسية</button>

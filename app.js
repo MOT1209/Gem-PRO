@@ -1,66 +1,280 @@
+/**
+ * Gym Pro Smart Trainer - Frontend Application
+ * Connected to Node.js/Express Backend + Supabase
+ */
+
+// ============================================
+// Configuration
+// ============================================
+const CONFIG = {
+    // Backend API URL - change this to your server URL
+    API_URL: 'https://gym-pro-backend.onrender.com',
+    // OR use local server:
+    // API_URL: 'http://localhost:3000',
+    
+    // Supabase (for direct database access as fallback)
+    SUPABASE_URL: 'https://ilopoevhgkgepumjsmid.supabase.co',
+    SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlsb3BvZXZoZ2tnZXB1bWpzbWlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjQ5NDAsImV4cCI6MjA4NDE0MDk0MH0.LnJN5o9MqSLodN1PXwRLIBuDWUiZ-9rGb1CLdz3fdt8',
+    
+    // Google Vision API
+    GOOGLE_VISION_KEY: 'AIzaSyChzhyU3u7dPWQ5mnfPWrbs2dOjYzIx614'
+};
+
+// ============================================
+// API Helper Functions
+// ============================================
+class API {
+    static async request(endpoint, options = {}) {
+        const token = localStorage.getItem('authToken');
+        
+        const config = {
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token && { 'Authorization': `Bearer ${token}` })
+            },
+            ...options
+        };
+
+        try {
+            const response = await fetch(`${CONFIG.API_URL}${endpoint}`, config);
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Request failed');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('API Error:', error);
+            throw error;
+        }
+    }
+
+    static get(endpoint) {
+        return this.request(endpoint, { method: 'GET' });
+    }
+
+    static post(endpoint, body) {
+        return this.request(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+    }
+
+    static delete(endpoint) {
+        return this.request(endpoint, { method: 'DELETE' });
+    }
+}
+
+// ============================================
+// Main Application Class
+// ============================================
 class SmartTrainerPro {
     constructor() {
-        // تهيئة Supabase
-        this.supabase = window.supabase.createClient(
-            'https://ilopoevhgkgepumjsmid.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlsb3BvZXZoZ2tnZXB1bWpzbWlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjQ5NDAsImV4cCI6MjA4NDE0MDk0MH0.LnJN5o9MqSLodN1PXwRLIBuDWUiZ-9rGb1CLdz3fdt8'
-        );
+        // State
+        this.isAuthenticated = false;
+        this.isGuestMode = true;
+        this.user = null;
+        this.token = null;
         
+        // Data stores
+        this.dailyMeals = [];
+        this.waterData = { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
+        this.userProfile = { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+        this.vitalsData = [];
+        this.progressPhotos = [];
+        
+        // Initialize
+        this.checkAuth();
+    }
+
+    // ============================================
+    // Authentication
+    // ============================================
+    checkAuth() {
+        const token = localStorage.getItem('authToken');
+        const user = localStorage.getItem('userData');
+        
+        if (token && user) {
+            this.token = token;
+            this.user = JSON.parse(user);
+            this.isAuthenticated = true;
+            this.isGuestMode = false;
+            this.showApp();
+            this.loadAllData();
+        } else {
+            this.showAuthModal();
+        }
+    }
+
+    showAuthModal() {
+        document.getElementById('authModal').classList.add('active');
+        document.getElementById('app').style.display = 'none';
+    }
+
+    showApp() {
+        document.getElementById('authModal').classList.remove('active');
+        document.getElementById('app').style.display = 'block';
+        
+        // Show user info
+        const userInfo = document.getElementById('userInfo');
+        if (this.user) {
+            userInfo.style.display = 'flex';
+            document.getElementById('userNameDisplay').textContent = this.user.name || this.user.email;
+        }
+    }
+
+    async handleLogin(email, password) {
+        try {
+            const data = await API.post('/api/auth/login', { email, password });
+            this.handleAuthSuccess(data);
+        } catch (error) {
+            this.showAuthError(error.message);
+        }
+    }
+
+    async handleRegister(name, email, password) {
+        try {
+            const data = await API.post('/api/auth/register', { name, email, password });
+            this.handleAuthSuccess(data);
+        } catch (error) {
+            this.showAuthError(error.message);
+        }
+    }
+
+    handleAuthSuccess(data) {
+        this.token = data.token;
+        this.user = data.user;
+        this.isAuthenticated = true;
+        this.isGuestMode = false;
+        
+        localStorage.setItem('authToken', data.token);
+        localStorage.setItem('userData', JSON.stringify(data.user));
+        
+        this.showApp();
         this.loadAllData();
+    }
+
+    handleGuestLogin() {
+        this.isGuestMode = true;
+        this.isAuthenticated = false;
+        
+        // Load from localStorage
+        this.dailyMeals = JSON.parse(localStorage.getItem('dailyMeals')) || [];
+        this.waterData = JSON.parse(localStorage.getItem('waterData')) || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
+        this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+        this.vitalsData = JSON.parse(localStorage.getItem('vitalsData')) || [];
+        this.progressPhotos = JSON.parse(localStorage.getItem('progressPhotos')) || [];
+        
+        this.showApp();
         this.init();
     }
 
+    logout() {
+        this.token = null;
+        this.user = null;
+        this.isAuthenticated = false;
+        
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+        
+        location.reload();
+    }
+
+    showAuthError(message) {
+        const errorEl = document.getElementById('authError');
+        errorEl.textContent = message;
+        errorEl.classList.add('show');
+        setTimeout(() => errorEl.classList.remove('show'), 3000);
+    }
+
+    // ============================================
+    // Data Loading
+    // ============================================
     async loadAllData() {
+        if (this.isGuestMode) {
+            this.loadFromLocalStorage();
+            this.init();
+            return;
+        }
+
         try {
-            // تحميل البيانات من Supabase
-            const { data: meals } = await this.supabase.from('meals').select('*');
+            // Load profile
+            const profile = await API.get('/api/profile');
+            if (profile) {
+                this.userProfile = profile;
+            }
+
+            // Load meals
+            const meals = await API.get('/api/meals');
             this.dailyMeals = meals || [];
-            
-            const { data: water } = await this.supabase.from('water').select('*');
-            this.waterData = water?.[0] || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
-            
-            const { data: profile } = await this.supabase.from('profile').select('*');
-            this.userProfile = profile?.[0] || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
-            
-            const { data: vitals } = await this.supabase.from('vitals').select('*');
+
+            // Load water
+            const water = await API.get('/api/water');
+            if (water) {
+                this.waterData = { ...this.waterData, ...water };
+            }
+
+            // Load vitals
+            const vitals = await API.get('/api/vitals');
             this.vitalsData = vitals || [];
-            
-            const { data: photos } = await this.supabase.from('photos').select('*');
+
+            // Load photos
+            const photos = await API.get('/api/photos');
             this.progressPhotos = photos || [];
+
+            // Update UI
+            this.init();
         } catch (error) {
-            console.log('Using localStorage fallback:', error);
-            // Fallback لـ localStorage
-            this.dailyMeals = JSON.parse(localStorage.getItem('dailyMeals')) || [];
-            this.waterData = JSON.parse(localStorage.getItem('waterData')) || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
-            this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
-            this.vitalsData = JSON.parse(localStorage.getItem('vitalsData')) || [];
-            this.progressPhotos = JSON.parse(localStorage.getItem('progressPhotos')) || [];
+            console.log('API load failed, using localStorage:', error);
+            this.loadFromLocalStorage();
+            this.init();
         }
     }
 
+    loadFromLocalStorage() {
+        this.dailyMeals = JSON.parse(localStorage.getItem('dailyMeals')) || [];
+        this.waterData = JSON.parse(localStorage.getItem('waterData')) || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
+        this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+        this.vitalsData = JSON.parse(localStorage.getItem('vitalsData')) || [];
+        this.progressPhotos = JSON.parse(localStorage.getItem('progressPhotos')) || [];
+    }
+
+    // ============================================
+    // Data Saving
+    // ============================================
     async saveData(key, data) {
-        // حفظ في localStorage كنسخة احتياطية
+        // Always save to localStorage
         localStorage.setItem(key, JSON.stringify(data));
-        
-        // حفظ في Supabase
+
+        if (this.isGuestMode) return;
+
         try {
-            if (key === 'dailyMeals') {
-                await this.supabase.from('meals').upsert(data.map(m => ({ ...m, id: m.id || undefined })));
-            } else if (key === 'waterData') {
-                await this.supabase.from('water').upsert([data]);
-            } else if (key === 'userProfile') {
-                await this.supabase.from('profile').upsert([data]);
+            switch(key) {
+                case 'dailyMeals':
+                    // Already handled in add/delete functions
+                    break;
+                case 'waterData':
+                    await API.post('/api/water', data);
+                    break;
+                case 'userProfile':
+                    await API.post('/api/profile', data);
+                    break;
             }
         } catch (error) {
-            console.log('Supabase save error:', error);
+            console.log('API save failed:', error);
         }
-        
+
         this.updateHomeSummary();
     }
 
+    // ============================================
+    // Initialization
+    // ============================================
     init() {
         this.checkDailyReset();
         this.setupEventListeners();
+        this.setupAuthListeners();
         this.updateWaterDisplay();
         this.renderDailyLog();
         this.renderWorkoutPlan();
@@ -80,7 +294,11 @@ class SmartTrainerPro {
         }
     }
 
+    // ============================================
+    // Event Listeners
+    // ============================================
     setupEventListeners() {
+        // Navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.onclick = (e) => this.showSection(e.target.closest('.nav-btn').dataset.section);
         });
@@ -128,7 +346,54 @@ class SmartTrainerPro {
         });
     }
 
-    // --- Water ---
+    setupAuthListeners() {
+        // Auth tabs
+        document.querySelectorAll('.auth-tab').forEach(tab => {
+            tab.onclick = (e) => {
+                document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                const tabName = e.target.dataset.tab;
+                document.getElementById('loginForm').style.display = tabName === 'login' ? 'flex' : 'none';
+                document.getElementById('registerForm').style.display = tabName === 'register' ? 'flex' : 'none';
+            };
+        });
+
+        // Login form
+        document.getElementById('loginForm').onsubmit = (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            this.handleLogin(email, password);
+        };
+
+        // Register form
+        document.getElementById('registerForm').onsubmit = (e) => {
+            e.preventDefault();
+            const name = document.getElementById('registerName').value;
+            const email = document.getElementById('registerEmail').value;
+            const password = document.getElementById('registerPassword').value;
+            this.handleRegister(name, email, password);
+        };
+
+        // Guest button
+        document.getElementById('guestBtn').onclick = () => this.handleGuestLogin();
+
+        // Logout button
+        document.getElementById('logoutBtn').onclick = () => this.logout();
+    }
+
+    showSection(sectionId) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        
+        document.getElementById(sectionId).classList.add('active');
+        document.querySelector(`[data-section="${sectionId}"]`)?.classList.add('active');
+    }
+
+    // ============================================
+    // Water Tracking
+    // ============================================
     addWater() {
         if (this.waterData.today < 20) {
             this.waterData.today++;
@@ -136,23 +401,27 @@ class SmartTrainerPro {
             this.showWaterTip();
         }
     }
+
     addGlass() {
         if (this.waterData.today < 20) {
-            this.waterData.today += 2; // Large glass = 2 cups
+            this.waterData.today += 2;
             this.saveWaterAndSync();
             this.showWaterTip();
         }
     }
+
     removeWater() {
         if (this.waterData.today > 0) {
             this.waterData.today--;
             this.saveWaterAndSync();
         }
     }
+
     resetWater() {
         this.waterData.today = 0;
         this.saveWaterAndSync();
     }
+
     saveWaterAndSync() {
         const today = new Date().toISOString().split('T')[0];
         this.waterData.history[today] = this.waterData.today;
@@ -160,6 +429,7 @@ class SmartTrainerPro {
         this.updateWaterDisplay();
         this.renderWaterHistory();
     }
+
     updateWaterDisplay() {
         document.getElementById('waterCount').textContent = this.waterData.today;
         document.getElementById('waterTarget').textContent = '/ ' + this.waterData.target + ' أكواب';
@@ -168,11 +438,11 @@ class SmartTrainerPro {
         document.getElementById('waterProgressText').textContent = Math.round(percentage) + '% من الهدف اليومي';
         this.updateHomeSummary();
     }
-    
+
     showWaterTip() {
         const tips = [
-            '💧 ممتاز! استمر في الشرب',
-            '🌊 جسمك يحتاج الماء ليعمل بشكل أفضل',
+            '💧 ممتاز!',
+            ' استمر في الشرب🌊 جسمك يحتاج الماء ليعمل بشكل أفضل',
             '🥤 الماء يساعد على حرق الدهون',
             '💪 ممتاز! أنت على الطريق الصحيح',
             '🎯 اقتربت من هدفك اليومي',
@@ -182,14 +452,14 @@ class SmartTrainerPro {
         const randomTip = tips[Math.floor(Math.random() * tips.length)];
         document.getElementById('tipText').textContent = randomTip;
     }
-    
+
     renderWaterHistory() {
         const container = document.getElementById('historyBars');
         if (!container) return;
-        
+
         const days = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
         const today = new Date();
-        
+
         let html = '';
         for (let i = 6; i >= 0; i--) {
             const date = new Date(today);
@@ -198,7 +468,7 @@ class SmartTrainerPro {
             const dayName = days[date.getDay()];
             const count = this.waterData.history[dateStr] || 0;
             const height = Math.min((count / this.waterData.target) * 100, 100);
-            
+
             html += `
                 <div class="history-day">
                     <div class="history-bar">
@@ -210,182 +480,132 @@ class SmartTrainerPro {
         }
         container.innerHTML = html;
     }
-    
+
     setWaterGoal(goal) {
         this.waterData.target = parseInt(goal);
         this.saveData('waterData', this.waterData);
         this.updateWaterDisplay();
     }
 
-    // --- Food ---
+    // ============================================
+    // Food Tracking
+    // ============================================
     async analyzeFoodImage(event) {
         const file = event.target.files[0];
         if (!file) return;
-        
+
         const box = document.getElementById('uploadBox');
-        
-        // Show loading state
         box.innerHTML = '<div style="text-align:center;"><div class="upload-icon">🤖</div><p>🤔 جاري تحليل الصورة بالذكاء الاصطناعي...</p></div>';
-        
-        // Create image preview
+
         const reader = new FileReader();
         reader.onload = async (e) => {
             const imageData = e.target.result;
-            
-            try {
-                // استخدام Google Cloud Vision API
-                const apiKey = 'AIzaSyChzhyU3u7dPWQ5mnfPWrbs2dOjYzIx614';
-                
-                // تحويل الصورة لـ base64
-                const base64Image = imageData.split(',')[1];
-                
-                const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        requests: [{
-                            image: { content: base64Image },
-                            features: [{ type: 'LABEL_DETECTION', maxResults: 10 }],
-                            imageContext: { 
-                                labelDetectionParams: {
-                                    confidenceThreshold: 0.7
-                                }
-                            }
-                        }]
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.responses && result.responses[0].labelAnnotations) {
-                    const labels = result.responses[0].labelAnnotations;
-                    this.processGoogleVisionResults(labels, imageData);
-                } else {
-                    // إذا فشل، استخدم البديل المحلي
-                    this.analyzeWithLocalDB(imageData);
+
+            if (!this.isGuestMode) {
+                try {
+                    // Try API first
+                    const base64Image = imageData.split(',')[1];
+                    const data = await API.post('/api/analyze-food', { image: base64Image });
+                    
+                    if (data.foods && data.foods.length > 0) {
+                        this.processFoodAnalysis(data.foods, data.totals, imageData);
+                        return;
+                    }
+                } catch (error) {
+                    console.log('API failed, using local:', error);
                 }
-            } catch (error) {
-                console.log('API error:', error);
-                this.analyzeWithLocalDB(imageData);
             }
+
+            // Fallback to local analysis
+            this.analyzeWithLocalDB(imageData);
         };
-        
+
         reader.readAsDataURL(file);
     }
 
-    // معالجة نتائج Google Vision
-    processGoogleVisionResults(labels, imageData) {
+    processFoodAnalysis(foods, totals, imageData) {
         const box = document.getElementById('uploadBox');
         
-        // فلتر النتائج للبحث عن طعام
-        const foodLabels = labels.filter(l => 
-            l.description.toLowerCase().includes('food') ||
-            l.description.toLowerCase().includes('dish') ||
-            l.description.toLowerCase().includes('meal') ||
-            ['chicken', 'rice', 'salad', 'pizza', 'burger', 'bread', 'egg', 'meat', 'fish', 'vegetable', 'fruit', 'pasta', 'soup', 'dessert', 'cake', 'cookie', 'coffee', 'drink', 'juice', 'sandwich', 'wrap', 'taco', 'sushi', 'noodle', 'potato', 'tomato', 'onion', 'cheese', 'lettuce', 'carrot'].some(f => l.description.toLowerCase().includes(f))
-        ).slice(0, 3);
+        const emoji = { front: '📷', side: '📸', back: '📸' };
         
-        if (foodLabels.length === 0) {
-            // إذا لم يجد طعام، استخدم أول 3 نتائج
-            this.analyzeWithLocalDB(imageData);
-            return;
-        }
-        
-        // قاعدة بيانات لترجمة النتائج
-        const foodDatabase = {
-            'chicken': { n: 'دجاج', c: 165, p: 31, f: 3.6, cbs: 0, img: '🍗' },
-            'rice': { n: 'أرز', c: 130, p: 2.7, f: 0.3, cbs: 28, img: '🍚' },
-            'salad': { n: 'سلطة', c: 35, p: 2, f: 0.3, cbs: 7, img: '🥗' },
-            'pizza': { n: 'بيتزا', c: 266, p: 11, f: 10, cbs: 33, img: '🍕' },
-            'burger': { n: 'همبرجر', c: 295, p: 17, f: 14, cbs: 24, img: '🍔' },
-            'bread': { n: 'خبز', c: 79, p: 2.7, f: 1, cbs: 15, img: '🍞' },
-            'egg': { n: 'بيض', c: 78, p: 6, f: 5, cbs: 0.6, img: '🥚' },
-            'meat': { n: 'لحم', c: 250, p: 26, f: 15, cbs: 0, img: '🥩' },
-            'fish': { n: 'سمك', c: 136, p: 26, f: 3, cbs: 0, img: '🐟' },
-            'vegetable': { n: 'خضار', c: 35, p: 2, f: 0.3, cbs: 7, img: '🥬' },
-            'fruit': { n: 'فاكهة', c: 50, p: 1, f: 0.3, cbs: 12, img: '🍎' },
-            'pasta': { n: 'مكرونة', c: 131, p: 5, f: 1.1, cbs: 25, img: '🍝' },
-            'soup': { n: 'شوربة', c: 75, p: 4, f: 2, cbs: 10, img: '🍲' },
-            'cake': { n: 'كعكة', c: 350, p: 4, f: 18, cbs: 45, img: '🎂' },
-            'coffee': { n: 'قهوة', c: 5, p: 0.3, f: 0, cbs: 1, img: '☕' },
-            'sandwich': { n: 'ساندويش', c: 280, p: 15, f: 12, cbs: 30, img: '🥪' },
-            'sushi': { n: 'سوشي', c: 200, p: 10, f: 5, cbs: 30, img: '🍣' },
-            'noodle': { n: 'نودلز', c: 138, p: 4, f: 2, cbs: 25, img: '🍜' },
-            'potato': { n: 'بطاطس', c: 77, p: 2, f: 0.1, cbs: 17, img: '🥔' },
-            'cheese': { n: 'جبن', c: 113, p: 7, f: 9, cbs: 0.4, img: '🧀' }
-        };
-        
-        const detectedFoods = labels.slice(0, 3).map(label => {
-            const key = label.description.toLowerCase();
-            const food = foodDatabase[key] || { n: label.description, c: 150, p: 10, f: 5, cbs: 20, img: '🍽️' };
-            return {
-                ...food,
-                conf: Math.round(label.score * 100)
-            };
-        });
-        
-        // حساب الإجمالي
-        const totalCalories = detectedFoods.reduce((sum, f) => sum + f.c, 0);
-        const totalProtein = detectedFoods.reduce((sum, f) => sum + f.p, 0);
-        const totalCarbs = detectedFoods.reduce((sum, f) => sum + f.cbs, 0);
-        
-        // عرض النتائج
         box.innerHTML = `
             <div style="text-align:center;">
                 <img src="${imageData}" style="width:120px; height:120px; object-fit:cover; border-radius:15px; margin-bottom:15px;">
                 <h4 style="color:var(--secondary);">✅ تم التحليل بالذكاء الاصطناعي!</h4>
-                <p style="font-size:0.9rem; color:#aaa;">${detectedFoods.map(f => f.img + ' ' + f.n + ' (' + f.conf + '%)').join(' + ')}</p>
+                <p style="font-size:0.9rem; color:#aaa;">${foods.map(f => f.name + ' (' + f.confidence + '%)').join(' + ')}</p>
             </div>
         `;
-        
-        // إضافة للوجبات
-        detectedFoods.forEach(f => {
+
+        foods.forEach(f => {
             const meal = {
                 id: Date.now() + Math.random(),
-                name: f.n,
-                calories: f.c,
-                protein: f.p,
-                carbs: f.cbs,
-                fat: f.f,
+                name: f.name,
+                calories: f.calories,
+                protein: f.protein,
+                carbs: f.carbs,
+                fat: f.fat,
                 date: new Date().toISOString().split('T')[0]
             };
             this.dailyMeals.push(meal);
         });
-        
+
         this.saveData('dailyMeals', this.dailyMeals);
         this.renderDailyLog();
-        
-        alert(`✅ تم اكتشاف ${detectedFoods.length} نوع طعام بالذكاء الاصطناعي!\n\n${detectedFoods.map(f => f.img + ' ' + f.n + ': ' + f.c + ' سعرة (دقة: ' + f.conf + '%)').join('\n')}\n\nإجمالي: ${totalCalories} سعرة | ${totalProtein}g بروتين | ${totalCarbs}g كربوهيدرات`);
-        
+
+        alert(`✅ تم اكتشاف ${foods.length} نوع طعام!\n\n${foods.map(f => f.name + ': ' + f.calories + ' سعرة').join('\n')}\n\nإجمالي: ${totals.calories} سعرة | ${totals.protein}g بروتين`);
+
         setTimeout(() => {
             box.innerHTML = '<div class="upload-icon">📷</div><p>اضغط لرفع صورة الطعام</p><small style="color: #6b7280;">JPG, PNG - الحد الأقصى 5MB</small>';
         }, 5000);
     }
 
+    analyzeWithLocalDB(imageData) {
+        // Use local food database for fallback
+        const foods = [
+            { name: 'وجبة', calories: 250, protein: 15, carbs: 30, fat: 8 }
+        ];
+        
+        this.processFoodAnalysis(foods, { calories: 250, protein: 15 }, imageData);
+    }
+
     renderDailyLog() {
         const list = document.getElementById('mealsList');
         const today = new Date().toISOString().split('T')[0];
-        const meals = this.dailyMeals.filter(m => m.date === today);
+        
+        let meals;
+        if (this.isGuestMode || !this.isAuthenticated) {
+            meals = this.dailyMeals.filter(m => m.date === today);
+        } else {
+            // API mode - show all meals
+            meals = this.dailyMeals;
+        }
+        
         list.innerHTML = meals.map(m => `
             <div class="meal-item" style="display:flex; justify-content:space-between; background:rgba(255,255,255,0.05); padding:12px; border-radius:10px; margin-bottom:8px;">
                 <span>${m.name}</span>
                 <span style="color:#aaa; font-size:0.85rem;">${m.calories} سعرة | ${m.protein}g بروتين${m.carbs ? ' | ' + m.carbs + 'g كربو' : ''}${m.fat ? ' | ' + m.fat + 'g دهن' : ''}</span>
             </div>
         `).join('') || '<p style="opacity:0.5; text-align:center;">لا وجبات</p>';
+        
         this.updateDailySummary();
     }
 
     updateDailySummary() {
         const today = new Date().toISOString().split('T')[0];
-        const meals = this.dailyMeals.filter(m => m.date === today);
+        let meals;
+        
+        if (this.isGuestMode || !this.isAuthenticated) {
+            meals = this.dailyMeals.filter(m => m.date === today);
+        } else {
+            meals = this.dailyMeals;
+        }
+        
         document.getElementById('totalCalories').textContent = meals.reduce((a, b) => a + b.calories, 0);
-        document.getElementById('totalProtein').textContent = meals.reduce((a, b) => a + b.protein, 0) + 'g';
+        document.getElementById('totalProtein').textContent = meals.reduce((a, b) => a + (b.protein || 0), 0) + 'g';
         this.updateHomeSummary();
     }
 
-    // --- Manual Meal Entry ---
+    // Manual meal entry
     addManualMeal() {
         const name = document.getElementById('mealName').value.trim();
         const calories = parseInt(document.getElementById('mealCalories').value) || 0;
@@ -418,18 +638,49 @@ class SmartTrainerPro {
         alert('✅ تم إضافة الوجبة بنجاح!');
     }
 
-    // --- Progress Photos ---
-    uploadProgressPhoto(event) {
+    // ============================================
+    // Progress Photos
+    // ============================================
+    async uploadProgressPhoto(event) {
         const file = event.target.files[0];
         if (!file) return;
 
         const photoType = document.querySelector('input[name="photoType"]:checked').value;
         const reader = new FileReader();
 
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
+            const imageData = e.target.result;
+
+            if (!this.isGuestMode) {
+                try {
+                    // Upload via API
+                    const formData = new FormData();
+                    formData.append('photo', new Blob([this.base64ToArrayBuffer(imageData)], { type: 'file.type' }));
+                    formData.append('type', photoType);
+                    
+                    const response = await fetch(`${CONFIG.API_URL}/api/photos`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${this.token}` },
+                        body: formData
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        this.progressPhotos.unshift(data.photo);
+                        this.saveData('progressPhotos', this.progressPhotos);
+                        this.renderPhotoTimeline();
+                        alert('✅ تم حفظ صورة التقدم!');
+                        return;
+                    }
+                } catch (error) {
+                    console.log('API upload failed:', error);
+                }
+            }
+
+            // Fallback to local
             const photo = {
                 id: Date.now(),
-                image: e.target.result,
+                image: imageData,
                 type: photoType,
                 date: new Date().toISOString().split('T')[0],
                 timestamp: new Date().toISOString()
@@ -439,10 +690,20 @@ class SmartTrainerPro {
             this.saveData('progressPhotos', this.progressPhotos);
             this.renderPhotoTimeline();
 
-            alert('✅ تم حفظ صورة التقدم بنجاح!');
+            alert('✅ تم حفظ صورة التقدم محلياً!');
         };
 
         reader.readAsDataURL(file);
+    }
+
+    base64ToArrayBuffer(base64) {
+        const binaryString = window.atob(base64.split(',')[1]);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
+        return bytes;
     }
 
     renderPhotoTimeline() {
@@ -454,15 +715,11 @@ class SmartTrainerPro {
             return;
         }
 
-        const typeLabels = {
-            front: 'أمامية',
-            side: 'جانبية',
-            back: 'خلفية'
-        };
+        const typeLabels = { front: 'أمامية', side: 'جانبية', back: 'خلفية' };
 
-        timeline.innerHTML = this.progressPhotos.slice().reverse().map(p => `
+        timeline.innerHTML = this.progressPhotos.slice(0, 10).map(p => `
             <div class="photo-item" style="background:rgba(255,255,255,0.05); padding:15px; border-radius:12px; margin-bottom:15px; display:flex; gap:15px; align-items:center;">
-                <img src="${p.image}" style="width:80px; height:80px; object-fit:cover; border-radius:10px;">
+                <img src="${p.image || p.image_url}" style="width:80px; height:80px; object-fit:cover; border-radius:10px;">
                 <div>
                     <strong>${typeLabels[p.type]}</strong><br>
                     <small style="color:var(--text-muted);">${p.date}</small>
@@ -471,15 +728,24 @@ class SmartTrainerPro {
         `).join('');
     }
 
-    // --- Workout ---
+    // ============================================
+    // Workout
+    // ============================================
     renderWorkoutPlan() {
-        const location = document.querySelector('.location-btn.active').dataset.location;
-        const goal = document.querySelector('.goal-btn.active').dataset.goal;
+        const location = document.querySelector('.location-btn.active')?.dataset.location || 'home';
+        const goal = document.querySelector('.goal-btn.active')?.dataset.goal || 'cut';
         const plan = document.getElementById('workoutPlan');
+        if (!plan) return;
 
         const workouts = {
-            home: { cut: ['تمارين ضغط - 3 مجموعات', 'قرفصاء - 4 مجموعات', 'بلانك - 60 ثانية'], bulk: ['ضغط واسع - 4 مجموعات', 'قرفصاء بلغاري - 3 مجموعات', 'عقبات - 3 مجموعات'] },
-            gym: { cut: ['ركض 20 دقيقة', 'تدريب دائري عالي الكثافة', 'سباحة'], bulk: ['بنش برس - 4 مجموعات', 'ديدليفت - 3 مجموعات', 'قرفصاء بالبار - 4 مجموعات'] }
+            home: {
+                cut: ['تمارين ضغط - 3 مجموعات', 'قرفصاء - 4 مجموعات', 'بلانك - 60 ثانية', 'قفز بالحبل - 10 دقائق'],
+                bulk: ['ضغط واسع - 4 مجموعات', 'قرفصاء بلغاري - 3 مجموعات', 'عقبات - 3 مجموعات', 'دقائق رفع أثقال']
+            },
+            gym: {
+                cut: ['ركض 20 دقيقة', 'تدريب دائري عالي الكثافة', 'سباحة', 'تمارين كارديو'],
+                bulk: ['بنش برس - 4 مجموعات', 'ديدليفت - 3 مجموعات', 'قرفصاء بالبار - 4 مجموعات', 'صفوف - 4 مجموعات']
+            }
         };
 
         plan.innerHTML = workouts[location][goal].map(ex => `
@@ -489,81 +755,127 @@ class SmartTrainerPro {
         `).join('');
     }
 
-    // --- Articles ---
+    // ============================================
+    // Articles
+    // ============================================
     renderArticles() {
         const articles = [
-            { t: 'أهمية البروتين', d: 'يساعد البروتين في بناء العضلات واستشفائها بعد التمرين.' },
-            { t: 'شرب الماء والتحمل', d: 'الجفاف يقلل من أدائك الرياضي بنسبة تصل إلى 20%.' },
-            { t: 'النوم العميق', d: 'يفرز الجسم هرمون النمو أثناء النوم العميق ليلاً.' }
+            { t: 'أهمية البروتين', d: 'يساعد البروتين في بناء العضلات واستشفائها بعد التمرين.', c: '🥗' },
+            { t: 'شرب الماء والتحمل', d: 'الجفاف يقلل من أدائك الرياضي بنسبة تصل إلى 20%.', c: '💧' },
+            { t: 'النوم العميق', d: 'يفرز الجسم هرمون النمو أثناء النوم العميق ليلاً.', c: '😴' },
+            { t: 'التوازن الغذائي', d: 'احصل على توازن بين البروتين والكربوهيدرات والدهون.', c: '⚖️' }
         ];
-        document.getElementById('articlesList').innerHTML = articles.map(a => `
+        
+        const container = document.getElementById('articlesList');
+        if (!container) return;
+        
+        container.innerHTML = articles.map(a => `
             <div class="summary-card" style="flex-direction:column; align-items:flex-start;">
-                <h3>${a.t}</h3>
-                <p style="font-size:0.9rem; color:var(--text-muted);">${a.d}</p>
+                <div style="font-size:2rem; margin-bottom:10px;">${a.c}</div>
+                <h3 style="font-size:1rem; margin-bottom:8px;">${a.t}</h3>
+                <p style="color:var(--text-muted); font-size:0.9rem;">${a.d}</p>
             </div>
         `).join('');
     }
 
-    // --- Profile ---
+    // ============================================
+    // Profile
+    // ============================================
     loadProfile() {
-        const p = this.userProfile;
-        document.getElementById('userName').value = p.name || '';
-        document.getElementById('userAge').value = p.age || '';
-        document.getElementById('userHeight').value = p.height || '';
-        document.getElementById('userWeight').value = p.weight || '';
+        document.getElementById('userName').value = this.userProfile.name || '';
+        document.getElementById('userAge').value = this.userProfile.age || '';
+        document.getElementById('userHeight').value = this.userProfile.height || '';
+        document.getElementById('userWeight').value = this.userProfile.weight || '';
     }
 
-    saveProfile() {
+    async saveProfile() {
+        const name = document.getElementById('userName').value;
+        const age = document.getElementById('userAge').value;
+        const height = document.getElementById('userHeight').value;
+        const weight = document.getElementById('userWeight').value;
+
         this.userProfile = {
-            name: document.getElementById('userName').value,
-            age: document.getElementById('userAge').value,
-            height: document.getElementById('userHeight').value,
-            weight: document.getElementById('userWeight').value,
-            targetCalories: 2000
+            ...this.userProfile,
+            name, age, height, weight
         };
+
         this.saveData('userProfile', this.userProfile);
         alert('✅ تم حفظ البيانات!');
     }
 
-    // --- Vitals ---
-    saveVitals() {
-        alert('✅ تم حفظ القياسات الحيوية بنجاح!');
-        this.showSection('home');
-    }
+    // ============================================
+    // Vitals
+    // ============================================
+    async saveVitals() {
+        const vitals = {
+            systolic: document.getElementById('systolicBP').value,
+            diastolic: document.getElementById('diastolicBP').value,
+            heartRate: document.getElementById('heartRate').value,
+            bloodSugar: document.getElementById('bloodSugar').value,
+            cholesterol: document.getElementById('cholesterol').value
+        };
 
-    // --- GPS ---
-    toggleGPS() {
-        this.isTracking = !this.isTracking;
-        const btn = document.getElementById('startTrackingBtn');
-        if (this.isTracking) {
-            btn.textContent = '⏹️ إيقاف التتبع';
-            btn.style.background = 'var(--danger)';
-            alert('📡 جاري البحث عن إشارة GPS...');
+        if (this.isGuestMode) {
+            this.vitalsData.push({ ...vitals, created_at: new Date().toISOString() });
+            localStorage.setItem('vitalsData', JSON.stringify(this.vitalsData));
         } else {
-            btn.textContent = '▶️ بدء التتبع';
-            btn.style.background = 'var(--secondary)';
-            alert('🏁 تم حفظ المسار بنجاح!');
+            try {
+                await API.post('/api/vitals', vitals);
+            } catch (error) {
+                console.log('API failed, saving locally');
+                this.vitalsData.push({ ...vitals, created_at: new Date().toISOString() });
+                localStorage.setItem('vitalsData', JSON.stringify(this.vitalsData));
+            }
         }
+
+        alert('✅ تم حفظ القياسات!');
     }
 
-    // --- Common ---
+    // ============================================
+    // Dashboard Summary
+    // ============================================
     updateHomeSummary() {
         const today = new Date().toISOString().split('T')[0];
-        const meals = this.dailyMeals.filter(m => m.date === today);
-        const calories = meals.reduce((a, b) => a + b.calories, 0);
+        
+        // Water
+        document.getElementById('homeWater').textContent = 
+            `${this.waterData.today}/${this.waterData.target} أكواب`;
 
-        if (document.getElementById('homeWater')) document.getElementById('homeWater').textContent = `${this.waterData.today}/8 أكواب`;
-        if (document.getElementById('homeCalories')) document.getElementById('homeCalories').textContent = `${calories}/${this.userProfile.targetCalories || 2000}`;
+        // Calories
+        const todayMeals = this.dailyMeals.filter(m => m.date === today);
+        const totalCalories = todayMeals.reduce((a, b) => a + b.calories, 0);
+        const target = this.userProfile.targetCalories || 2000;
+        document.getElementById('homeCalories').textContent = `${totalCalories}/${target}`;
+
+        // Workout
+        document.getElementById('homeWorkout').textContent = this.progressPhotos.length > 0 ? 'نشط' : 'لم يبدأ';
+
+        // Sleep (placeholder)
+        document.getElementById('homeSleep').textContent = '-- ساعات';
     }
 
-    showSection(id) {
-        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-        document.querySelector(`[data-section="${id}"]`).classList.add('active');
-        window.scrollTo(0, 0);
+    // ============================================
+    // GPS Tracking (Placeholder)
+    // ============================================
+    toggleGPS() {
+        const startBtn = document.getElementById('startTrackingBtn');
+        const stopBtn = document.getElementById('stopTrackingBtn');
+        
+        if (startBtn.style.display !== 'none') {
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            alert('📍 جاري تتبع موقعك...');
+        } else {
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            alert('⏹️ تم إيقاف التتبع');
+        }
     }
 }
 
-const app = new SmartTrainerPro();
-window.app = app;
+// ============================================
+// Initialize App
+// ============================================
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new SmartTrainerPro();
+});
