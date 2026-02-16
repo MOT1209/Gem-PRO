@@ -35,20 +35,20 @@
                 <button type="submit" class="save-btn" style="width:100%;">دخول</button>
             </form>
             
-            <form id="registerForm" class="auth-form" style="display:none;">
+            <form id="registerFormModal" class="auth-form" style="display:none;">
                 <div class="form-group">
                     <label>👤 الاسم</label>
-                    <input type="text" id="registerName" placeholder="اسمك">
+                    <input type="text" id="registerNameModal" placeholder="اسمك">
                 </div>
                 <div class="form-group">
                     <label>📧 البريد الإلكتروني</label>
-                    <input type="email" id="registerEmail" placeholder="بريدك الإلكتروني" required>
+                    <input type="email" id="registerEmailModal" placeholder="بريدك الإلكتروني" required>
                 </div>
                 <div class="form-group">
                     <label>🔑 كلمة المرور</label>
-                    <input type="password" id="registerPassword" placeholder="كلمة المرور" required minlength="6">
+                    <input type="password" id="registerPasswordModal" placeholder="كلمة المرور" required minlength="6">
                 </div>
-                <button type="submit" class="save-btn" style="width:100%;">إنشاء حساب</button>
+                <button type="button" class="save-btn" style="width:100%; background: var(--secondary);" onclick="registerUser()">إنشاء حساب</button>
             </form>
             
             <div class="auth-footer">

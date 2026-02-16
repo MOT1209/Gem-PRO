@@ -71,6 +71,9 @@ class API {
 // ============================================
 class SmartTrainerPro {
     constructor() {
+        // Initialize Supabase
+        this.supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+        
         // State
         this.isAuthenticated = false;
         this.isGuestMode = true;
@@ -126,19 +129,72 @@ class SmartTrainerPro {
 
     async handleLogin(email, password) {
         try {
-            const data = await API.post('/api/auth/login', { email, password });
-            this.handleAuthSuccess(data);
+            // Use Supabase directly for login
+            const { data, error } = await this.supabase.auth.signInWithPassword({
+                email,
+                password
+            });
+            
+            if (error) throw error;
+            
+            if (data.user) {
+                // Get profile
+                const { data: profile } = await this.supabase
+                    .from('profile')
+                    .select('name')
+                    .eq('user_id', data.user.id)
+                    .single();
+                
+                this.user = { 
+                    id: data.user.id, 
+                    email: data.user.email, 
+                    name: profile?.name || email.split('@')[0] 
+                };
+                
+                localStorage.setItem('userData', JSON.stringify(this.user));
+                
+                this.showApp();
+                this.loadAllData();
+            }
         } catch (error) {
-            this.showAuthError(error.message);
+            console.error('Login error:', error);
+            this.showAuthError(error.message || 'فشل تسجيل الدخول');
         }
     }
 
     async handleRegister(name, email, password) {
         try {
-            const data = await API.post('/api/auth/register', { name, email, password });
-            this.handleAuthSuccess(data);
+            // Use Supabase directly for registration
+            const { data, error } = await this.supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: { name }
+                }
+            });
+            
+            if (error) throw error;
+            
+            if (data.user) {
+                // Create profile
+                await this.supabase.from('profile').insert([{
+                    user_id: data.user.id,
+                    name: name,
+                    target_calories: 2000,
+                    target_water: 8
+                }]);
+                
+                // Save locally
+                this.user = { id: data.user.id, email, name };
+                localStorage.setItem('userData', JSON.stringify(this.user));
+                
+                alert('✅ تم إنشاء الحساب بنجاح! تحقق من بريدك للتفعيل.');
+                this.showApp();
+                this.loadAllData();
+            }
         } catch (error) {
-            this.showAuthError(error.message);
+            console.error('Register error:', error);
+            this.showAuthError(error.message || 'حدث خطأ أثناء التسجيل');
         }
     }
 
@@ -355,25 +411,16 @@ class SmartTrainerPro {
                 
                 const tabName = e.target.dataset.tab;
                 document.getElementById('loginForm').style.display = tabName === 'login' ? 'flex' : 'none';
-                document.getElementById('registerForm').style.display = tabName === 'register' ? 'flex' : 'none';
+                document.getElementById('registerFormModal').style.display = tabName === 'register' ? 'flex' : 'none';
             };
         });
 
         // Login form
-        document.getElementById('loginForm').onsubmit = (e) => {
+        document.getElementById('loginForm').onsubmit = async (e) => {
             e.preventDefault();
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
-            this.handleLogin(email, password);
-        };
-
-        // Register form
-        document.getElementById('registerForm').onsubmit = (e) => {
-            e.preventDefault();
-            const name = document.getElementById('registerName').value;
-            const email = document.getElementById('registerEmail').value;
-            const password = document.getElementById('registerPassword').value;
-            this.handleRegister(name, email, password);
+            await this.handleLogin(email, password);
         };
 
         // Guest button
@@ -879,3 +926,24 @@ class SmartTrainerPro {
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new SmartTrainerPro();
 });
+
+// Global function for modal registration
+async function registerUser() {
+    const name = document.getElementById('registerNameModal').value;
+    const email = document.getElementById('registerEmailModal').value;
+    const password = document.getElementById('registerPasswordModal').value;
+    
+    if (!email || !password) {
+        alert('الرجاء إدخال البريد الإلكتروني وكلمة المرور');
+        return;
+    }
+    
+    if (password.length < 6) {
+        alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+        return;
+    }
+    
+    if (window.app) {
+        await window.app.handleRegister(name, email, password);
+    }
+}
