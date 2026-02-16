@@ -151,17 +151,42 @@
                 <div class="water-tracker">
                     <div class="water-bottle" id="waterBottle">
                         <div class="water-level" id="waterLevel" style="height: 0%"></div>
+                        <div class="water-icon">💧</div>
                     </div>
                     <div class="water-stats">
                         <span class="water-count" id="waterCount">0</span>
-                        <span class="water-total">/ 8 أكواب</span>
+                        <span class="water-total" id="waterTarget">/ 8 أكواب</span>
                     </div>
+                    
+                    <div class="water-progress-text" id="waterProgressText">0% من الهدف اليومي</div>
                     
                     <div class="water-controls">
                         <button id="addWaterBtn" class="water-btn">+ إضافة كوب</button>
-                        <button id="removeWaterBtn" class="water-btn remove">- إزالة كوب</button>
+                        <button id="addGlassBtn" class="water-btn glass">+ كأس كبيرة</button>
+                        <button id="removeWaterBtn" class="water-btn remove">- إزالة</button>
                         <button id="resetWaterBtn" class="water-btn reset">إعادة</button>
                     </div>
+                    
+                    <div class="water-settings">
+                        <label>الهدف اليومي:</label>
+                        <select id="waterGoalSelect">
+                            <option value="4">4 أكواب</option>
+                            <option value="6">6 أكواب</option>
+                            <option value="8" selected>8 أكواب</option>
+                            <option value="10">10 أكواب</option>
+                            <option value="12">12 كوب</option>
+                        </select>
+                    </div>
+                    
+                    <div class="water-tips" id="waterTips">
+                        <h4>💡 نصائح الترطيب:</h4>
+                        <p id="tipText">اشرب كوباً ماءاً الآن لبدء يوم صحي!</p>
+                    </div>
+                </div>
+                
+                <div class="water-history">
+                    <h3>📅 سجل الأسبوع</h3>
+                    <div class="history-bars" id="historyBars"></div>
                 </div>
             </section>
 

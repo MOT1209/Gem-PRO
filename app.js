@@ -50,8 +50,10 @@ class SmartTrainerPro {
 
         // Water
         document.getElementById('addWaterBtn').onclick = () => this.addWater();
+        document.getElementById('addGlassBtn').onclick = () => this.addGlass();
         document.getElementById('removeWaterBtn').onclick = () => this.removeWater();
         document.getElementById('resetWaterBtn').onclick = () => this.resetWater();
+        document.getElementById('waterGoalSelect').onchange = (e) => this.setWaterGoal(e.target.value);
 
         // Food
         const foodInput = document.getElementById('foodImage');
@@ -94,6 +96,14 @@ class SmartTrainerPro {
         if (this.waterData.today < 20) {
             this.waterData.today++;
             this.saveWaterAndSync();
+            this.showWaterTip();
+        }
+    }
+    addGlass() {
+        if (this.waterData.today < 20) {
+            this.waterData.today += 2; // Large glass = 2 cups
+            this.saveWaterAndSync();
+            this.showWaterTip();
         }
     }
     removeWater() {
@@ -111,12 +121,63 @@ class SmartTrainerPro {
         this.waterData.history[today] = this.waterData.today;
         this.saveData('waterData', this.waterData);
         this.updateWaterDisplay();
+        this.renderWaterHistory();
     }
     updateWaterDisplay() {
         document.getElementById('waterCount').textContent = this.waterData.today;
+        document.getElementById('waterTarget').textContent = '/ ' + this.waterData.target + ' أكواب';
         const percentage = (this.waterData.today / this.waterData.target) * 100;
         document.getElementById('waterLevel').style.height = Math.min(percentage, 100) + '%';
+        document.getElementById('waterProgressText').textContent = Math.round(percentage) + '% من الهدف اليومي';
         this.updateHomeSummary();
+    }
+    
+    showWaterTip() {
+        const tips = [
+            '💧 ممتاز! استمر في الشرب',
+            '🌊 جسمك يحتاج الماء ليعمل بشكل أفضل',
+            '🥤 الماء يساعد على حرق الدهون',
+            '💪继续保持!
+            '🎯_goal!_goal',
+            '😄', _water': 'شرب الماء يجعلك happier',
+            '🏃♀️', _after': 'الماء مهم للرياضيين'
+        ];
+        const randomTip = tips[Math.floor(Math.random() * tips.length)];
+        document.getElementById('tipText').textContent = randomTip;
+    }
+    
+    renderWaterHistory() {
+        const container = document.getElementById('historyBars');
+        if (!container) return;
+        
+        const days = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
+        const today = new Date();
+        
+        let html = '';
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toISOString().split('T')[0];
+            const dayName = days[date.getDay()];
+            const count = this.waterData.history[dateStr] || 0;
+            const height = Math.min((count / this.waterData.target) * 100, 100);
+            
+            html += `
+                <div class="history-day">
+                    <div class="history-bar">
+                        <div class="history-fill" style="height: ${height}%"></div>
+                    </div>
+                    <span>${i === 0 ? 'اليوم' : dayName}</span>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+    }
+    
+    setWaterGoal(goal) {
+        this.waterData.target = parseInt(goal);
+        this.saveData('waterData', this.waterData);
+        this.updateWaterDisplay();
     }
 
     // --- Food ---
