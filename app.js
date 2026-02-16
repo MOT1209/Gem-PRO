@@ -134,89 +134,136 @@ class SmartTrainerPro {
         reader.onload = async (e) => {
             const imageData = e.target.result;
             
-            // محاكاة الذكاء الاصطناعي مع وقت معالجة
-            await new Promise(resolve => setTimeout(resolve, 2500));
-            
-            // قاعدة بيانات كبيرة للطعام
-            const foodDatabase = [
-                { n: 'دجاج مشوي', c: 165, p: 31, f: 3.6, cbs: 0, img: '🍗' },
-                { n: 'أرز أبيض', c: 130, p: 2.7, f: 0.3, cbs: 28, img: '🍚' },
-                { n: 'سلطة خضراء', c: 35, p: 2, f: 0.3, cbs: 7, img: '🥗' },
-                { n: 'سمك مشوي', c: 136, p: 26, f: 3, cbs: 0, img: '🐟' },
-                { n: 'بيض مسلوق', c: 78, p: 6, f: 5, cbs: 0.6, img: '🥚' },
-                { n: 'شوفان', c: 150, p: 5, f: 3, cbs: 27, img: '🥣' },
-                { n: 'موز', c: 89, p: 1.1, f: 0.3, cbs: 23, img: '🍌' },
-                { n: 'تفاح', c: 52, p: 0.3, f: 0.2, cbs: 14, img: '🍎' },
-                { n: 'زبادي', c: 100, p: 17, f: 0.7, cbs: 6, img: '🥛' },
-                { n: 'خبز أبيض', c: 79, p: 2.7, f: 1, cbs: 15, img: '🍞' },
-                { n: 'مكرونة', c: 131, p: 5, f: 1.1, cbs: 25, img: '🍝' },
-                { n: 'همبرجر', c: 295, p: 17, f: 14, cbs: 24, img: '🍔' },
-                { n: 'بيتزا', c: 266, p: 11, f: 10, cbs: 33, img: '🍕' },
-                { n: 'فول مدمس', c: 114, p: 8, f: 0.4, cbs: 20, img: '🫘' },
-                { n: 'كبة', c: 180, p: 12, f: 10, cbs: 12, img: '🥟' },
-                { n: 'شاورما', c: 220, p: 18, f: 12, cbs: 15, img: '🥙' },
-                { n: 'حمص', c: 166, p: 8, f: 10, cbs: 14, img: '🧆' },
-                { n: 'عنب', c: 69, p: 0.7, f: 0.2, cbs: 18, img: '🍇' },
-                { n: 'برتقال', c: 47, p: 0.9, f: 0.1, cbs: 12, img: '🍊' },
-                { n: 'بطاطس مقلية', c: 312, p: 3, f: 17, cbs: 41, img: '🍟' }
-            ];
-            
-            // محاكاة اكتشاف 1-3 أنواع طعام
-            const detectedFoods = [];
-            const numFoods = Math.floor(Math.random() * 3) + 1;
-            const confidence = Math.floor(Math.random() * 30) + 70; // 70-100%
-            
-            for (let i = 0; i < numFoods; i++) {
-                const randomFood = foodDatabase[Math.floor(Math.random() * foodDatabase.length)];
-                if (!detectedFoods.find(f => f.n === randomFood.n)) {
-                    detectedFoods.push({...randomFood, conf: confidence - (i * 5)});
+            try {
+                // استخدام Google Cloud Vision API
+                const apiKey = 'AIzaSyChzhyU3u7dPWQ5mnfPWrbs2dOjYzIx614';
+                
+                // تحويل الصورة لـ base64
+                const base64Image = imageData.split(',')[1];
+                
+                const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        requests: [{
+                            image: { content: base64Image },
+                            features: [{ type: 'LABEL_DETECTION', maxResults: 10 }],
+                            imageContext: { 
+                                labelDetectionParams: {
+                                    confidenceThreshold: 0.7
+                                }
+                            }
+                        }]
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.responses && result.responses[0].labelAnnotations) {
+                    const labels = result.responses[0].labelAnnotations;
+                    this.processGoogleVisionResults(labels, imageData);
+                } else {
+                    // إذا فشل، استخدم البديل المحلي
+                    this.analyzeWithLocalDB(imageData);
                 }
+            } catch (error) {
+                console.log('API error:', error);
+                this.analyzeWithLocalDB(imageData);
             }
-            
-            // حساب الإجمالي
-            const totalCalories = detectedFoods.reduce((sum, f) => sum + f.c, 0);
-            const totalProtein = detectedFoods.reduce((sum, f) => sum + f.p, 0);
-            const totalCarbs = detectedFoods.reduce((sum, f) => sum + f.cbs, 0);
-            
-            // عرض النتائج
-            box.innerHTML = `
-                <div style="text-align:center;">
-                    <img src="${imageData}" style="width:120px; height:120px; object-fit:cover; border-radius:15px; margin-bottom:15px;">
-                    <h4 style="color:var(--secondary);">✅ تم التحليل بالذكاء الاصطناعي!</h4>
-                    <p style="font-size:0.9rem; color:#aaa;">${detectedFoods.map(f => f.img + ' ' + f.n + ' (' + f.conf + '%)').join(' + ')}</p>
-                </div>
-            `;
-            
-            // إضافة للوجبات
-            detectedFoods.forEach(f => {
-                const meal = {
-                    id: Date.now() + Math.random(),
-                    name: f.n,
-                    calories: f.c,
-                    protein: f.p,
-                    carbs: f.cbs,
-                    fat: f.f,
-                    date: new Date().toISOString().split('T')[0]
-                };
-                this.dailyMeals.push(meal);
-            });
-            
-            this.saveData('dailyMeals', this.dailyMeals);
-            this.renderDailyLog();
-            
-            alert(`✅ تم اكتشاف ${detectedFoods.length} نوع طعام بالذكاء الاصطناعي!\n\n${detectedFoods.map(f => f.img + ' ' + f.n + ': ' + f.c + ' سعرة (دقة: ' + f.conf + '%)').join('\n')}\n\nإجمالي: ${totalCalories} سعرة | ${totalProtein}g بروتين | ${totalCarbs}g كربوهيدرات`);
-            
-            setTimeout(() => {
-                box.innerHTML = '<div class="upload-icon">📷</div><p>اضغط لرفع صورة الطعام</p><small style="color: #6b7280;">JPG, PNG - الحد الأقصى 5MB</small>';
-            }, 5000);
         };
         
         reader.readAsDataURL(file);
     }
 
-    // تحليل باستخدام قاعدة البيانات المحلية (بديل)
-    analyzeWithLocalDB(imageData) {
-        //已经没有使用
+    // معالجة نتائج Google Vision
+    processGoogleVisionResults(labels, imageData) {
+        const box = document.getElementById('uploadBox');
+        
+        // فلتر النتائج للبحث عن طعام
+        const foodLabels = labels.filter(l => 
+            l.description.toLowerCase().includes('food') ||
+            l.description.toLowerCase().includes('dish') ||
+            l.description.toLowerCase().includes('meal') ||
+            ['chicken', 'rice', 'salad', 'pizza', 'burger', 'bread', 'egg', 'meat', 'fish', 'vegetable', 'fruit', 'pasta', 'soup', 'dessert', 'cake', 'cookie', 'coffee', 'drink', 'juice', 'sandwich', 'wrap', 'taco', 'sushi', 'noodle', 'potato', 'tomato', 'onion', 'cheese', 'lettuce', 'carrot'].some(f => l.description.toLowerCase().includes(f))
+        ).slice(0, 3);
+        
+        if (foodLabels.length === 0) {
+            // إذا لم يجد طعام، استخدم أول 3 نتائج
+            this.analyzeWithLocalDB(imageData);
+            return;
+        }
+        
+        // قاعدة بيانات لترجمة النتائج
+        const foodDatabase = {
+            'chicken': { n: 'دجاج', c: 165, p: 31, f: 3.6, cbs: 0, img: '🍗' },
+            'rice': { n: 'أرز', c: 130, p: 2.7, f: 0.3, cbs: 28, img: '🍚' },
+            'salad': { n: 'سلطة', c: 35, p: 2, f: 0.3, cbs: 7, img: '🥗' },
+            'pizza': { n: 'بيتزا', c: 266, p: 11, f: 10, cbs: 33, img: '🍕' },
+            'burger': { n: 'همبرجر', c: 295, p: 17, f: 14, cbs: 24, img: '🍔' },
+            'bread': { n: 'خبز', c: 79, p: 2.7, f: 1, cbs: 15, img: '🍞' },
+            'egg': { n: 'بيض', c: 78, p: 6, f: 5, cbs: 0.6, img: '🥚' },
+            'meat': { n: 'لحم', c: 250, p: 26, f: 15, cbs: 0, img: '🥩' },
+            'fish': { n: 'سمك', c: 136, p: 26, f: 3, cbs: 0, img: '🐟' },
+            'vegetable': { n: 'خضار', c: 35, p: 2, f: 0.3, cbs: 7, img: '🥬' },
+            'fruit': { n: 'فاكهة', c: 50, p: 1, f: 0.3, cbs: 12, img: '🍎' },
+            'pasta': { n: 'مكرونة', c: 131, p: 5, f: 1.1, cbs: 25, img: '🍝' },
+            'soup': { n: 'شوربة', c: 75, p: 4, f: 2, cbs: 10, img: '🍲' },
+            'cake': { n: 'كعكة', c: 350, p: 4, f: 18, cbs: 45, img: '🎂' },
+            'coffee': { n: 'قهوة', c: 5, p: 0.3, f: 0, cbs: 1, img: '☕' },
+            'sandwich': { n: 'ساندويش', c: 280, p: 15, f: 12, cbs: 30, img: '🥪' },
+            'sushi': { n: 'سوشي', c: 200, p: 10, f: 5, cbs: 30, img: '🍣' },
+            'noodle': { n: 'نودلز', c: 138, p: 4, f: 2, cbs: 25, img: '🍜' },
+            'potato': { n: 'بطاطس', c: 77, p: 2, f: 0.1, cbs: 17, img: '🥔' },
+            'cheese': { n: 'جبن', c: 113, p: 7, f: 9, cbs: 0.4, img: '🧀' }
+        };
+        
+        const detectedFoods = labels.slice(0, 3).map(label => {
+            const key = label.description.toLowerCase();
+            const food = foodDatabase[key] || { n: label.description, c: 150, p: 10, f: 5, cbs: 20, img: '🍽️' };
+            return {
+                ...food,
+                conf: Math.round(label.score * 100)
+            };
+        });
+        
+        // حساب الإجمالي
+        const totalCalories = detectedFoods.reduce((sum, f) => sum + f.c, 0);
+        const totalProtein = detectedFoods.reduce((sum, f) => sum + f.p, 0);
+        const totalCarbs = detectedFoods.reduce((sum, f) => sum + f.cbs, 0);
+        
+        // عرض النتائج
+        box.innerHTML = `
+            <div style="text-align:center;">
+                <img src="${imageData}" style="width:120px; height:120px; object-fit:cover; border-radius:15px; margin-bottom:15px;">
+                <h4 style="color:var(--secondary);">✅ تم التحليل بالذكاء الاصطناعي!</h4>
+                <p style="font-size:0.9rem; color:#aaa;">${detectedFoods.map(f => f.img + ' ' + f.n + ' (' + f.conf + '%)').join(' + ')}</p>
+            </div>
+        `;
+        
+        // إضافة للوجبات
+        detectedFoods.forEach(f => {
+            const meal = {
+                id: Date.now() + Math.random(),
+                name: f.n,
+                calories: f.c,
+                protein: f.p,
+                carbs: f.cbs,
+                fat: f.f,
+                date: new Date().toISOString().split('T')[0]
+            };
+            this.dailyMeals.push(meal);
+        });
+        
+        this.saveData('dailyMeals', this.dailyMeals);
+        this.renderDailyLog();
+        
+        alert(`✅ تم اكتشاف ${detectedFoods.length} نوع طعام بالذكاء الاصطناعي!\n\n${detectedFoods.map(f => f.img + ' ' + f.n + ': ' + f.c + ' سعرة (دقة: ' + f.conf + '%)').join('\n')}\n\nإجمالي: ${totalCalories} سعرة | ${totalProtein}g بروتين | ${totalCarbs}g كربوهيدرات`);
+        
+        setTimeout(() => {
+            box.innerHTML = '<div class="upload-icon">📷</div><p>اضغط لرفع صورة الطعام</p><small style="color: #6b7280;">JPG, PNG - الحد الأقصى 5MB</small>';
+        }, 5000);
     }
 
     renderDailyLog() {
