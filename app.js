@@ -11,11 +11,11 @@ const CONFIG = {
     API_URL: 'https://gym-pro-backend.onrender.com',
     // OR use local server:
     // API_URL: 'http://localhost:3000',
-    
+
     // Supabase (for direct database access as fallback)
     SUPABASE_URL: 'https://ilopoevhgkgepumjsmid.supabase.co',
     SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlsb3BvZXZoZ2tnZXB1bWpzbWlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NjQ5NDAsImV4cCI6MjA4NDE0MDk0MH0.LnJN5o9MqSLodN1PXwRLIBuDWUiZ-9rGb1CLdz3fdt8',
-    
+
     // Google Vision API
     GOOGLE_VISION_KEY: 'AIzaSyChzhyU3u7dPWQ5mnfPWrbs2dOjYzIx614'
 };
@@ -26,7 +26,7 @@ const CONFIG = {
 class API {
     static async request(endpoint, options = {}) {
         const token = localStorage.getItem('authToken');
-        
+
         const config = {
             headers: {
                 'Content-Type': 'application/json',
@@ -38,11 +38,11 @@ class API {
         try {
             const response = await fetch(`${CONFIG.API_URL}${endpoint}`, config);
             const data = await response.json();
-            
+
             if (!response.ok) {
                 throw new Error(data.error || 'Request failed');
             }
-            
+
             return data;
         } catch (error) {
             console.error('API Error:', error);
@@ -73,21 +73,22 @@ class SmartTrainerPro {
     constructor() {
         // Initialize Supabase
         this.supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-        
+
         // State
         this.isAuthenticated = false;
         this.isGuestMode = true;
         this.user = null;
         this.token = null;
-        
+
         // Data stores
         this.dailyMeals = [];
         this.waterData = { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
-        this.userProfile = { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+        this.userProfile = { name: '', age: '', height: '', weight: '', targetCalories: 2000, weightHistory: [] };
         this.vitalsData = [];
         this.progressPhotos = [];
-        
+
         // Initialize
+        this.charts = {};
         this.checkAuth();
     }
 
@@ -97,7 +98,7 @@ class SmartTrainerPro {
     checkAuth() {
         const token = localStorage.getItem('authToken');
         const user = localStorage.getItem('userData');
-        
+
         if (token && user) {
             this.token = token;
             this.user = JSON.parse(user);
@@ -118,7 +119,7 @@ class SmartTrainerPro {
     showApp() {
         document.getElementById('authModal').classList.remove('active');
         document.getElementById('app').style.display = 'block';
-        
+
         // Show user info
         const userInfo = document.getElementById('userInfo');
         if (this.user) {
@@ -134,9 +135,9 @@ class SmartTrainerPro {
                 email,
                 password
             });
-            
+
             if (error) throw error;
-            
+
             if (data.user) {
                 // Get profile
                 const { data: profile } = await this.supabase
@@ -144,15 +145,15 @@ class SmartTrainerPro {
                     .select('name')
                     .eq('user_id', data.user.id)
                     .single();
-                
-                this.user = { 
-                    id: data.user.id, 
-                    email: data.user.email, 
-                    name: profile?.name || email.split('@')[0] 
+
+                this.user = {
+                    id: data.user.id,
+                    email: data.user.email,
+                    name: profile?.name || email.split('@')[0]
                 };
-                
+
                 localStorage.setItem('userData', JSON.stringify(this.user));
-                
+
                 this.showApp();
                 this.loadAllData();
             }
@@ -172,9 +173,9 @@ class SmartTrainerPro {
                     data: { name }
                 }
             });
-            
+
             if (error) throw error;
-            
+
             if (data.user) {
                 // Create profile
                 await this.supabase.from('profile').insert([{
@@ -183,11 +184,11 @@ class SmartTrainerPro {
                     target_calories: 2000,
                     target_water: 8
                 }]);
-                
+
                 // Save locally
                 this.user = { id: data.user.id, email, name };
                 localStorage.setItem('userData', JSON.stringify(this.user));
-                
+
                 alert('✅ تم إنشاء الحساب بنجاح! تحقق من بريدك للتفعيل.');
                 this.showApp();
                 this.loadAllData();
@@ -203,10 +204,10 @@ class SmartTrainerPro {
         this.user = data.user;
         this.isAuthenticated = true;
         this.isGuestMode = false;
-        
+
         localStorage.setItem('authToken', data.token);
         localStorage.setItem('userData', JSON.stringify(data.user));
-        
+
         this.showApp();
         this.loadAllData();
     }
@@ -214,14 +215,14 @@ class SmartTrainerPro {
     handleGuestLogin() {
         this.isGuestMode = true;
         this.isAuthenticated = false;
-        
+
         // Load from localStorage
         this.dailyMeals = JSON.parse(localStorage.getItem('dailyMeals')) || [];
         this.waterData = JSON.parse(localStorage.getItem('waterData')) || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
-        this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+        this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000, weightHistory: [] };
         this.vitalsData = JSON.parse(localStorage.getItem('vitalsData')) || [];
         this.progressPhotos = JSON.parse(localStorage.getItem('progressPhotos')) || [];
-        
+
         this.showApp();
         this.init();
     }
@@ -230,10 +231,10 @@ class SmartTrainerPro {
         this.token = null;
         this.user = null;
         this.isAuthenticated = false;
-        
+
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
-        
+
         location.reload();
     }
 
@@ -255,34 +256,46 @@ class SmartTrainerPro {
         }
 
         try {
-            // Load profile
-            const profile = await API.get('/api/profile');
-            if (profile) {
-                this.userProfile = profile;
+            // Load from Supabase directly
+            if (this.user && this.user.id) {
+                // Load profile
+                const { data: profile } = await this.supabase
+                    .from('profile')
+                    .select('*')
+                    .eq('user_id', this.user.id)
+                    .single();
+                if (profile) {
+                    this.userProfile = profile;
+                }
+
+                // Load meals
+                const { data: meals } = await this.supabase
+                    .from('meals')
+                    .select('*')
+                    .eq('user_id', this.user.id);
+                this.dailyMeals = meals || [];
+
+                // Load water
+                const { data: water } = await this.supabase
+                    .from('water')
+                    .select('*')
+                    .eq('user_id', this.user.id)
+                    .single();
+                if (water) {
+                    this.waterData = { ...this.waterData, ...water };
+                }
+
+                // Load photos
+                const { data: photos } = await this.supabase
+                    .from('photos')
+                    .select('*')
+                    .eq('user_id', this.user.id);
+                this.progressPhotos = photos || [];
             }
-
-            // Load meals
-            const meals = await API.get('/api/meals');
-            this.dailyMeals = meals || [];
-
-            // Load water
-            const water = await API.get('/api/water');
-            if (water) {
-                this.waterData = { ...this.waterData, ...water };
-            }
-
-            // Load vitals
-            const vitals = await API.get('/api/vitals');
-            this.vitalsData = vitals || [];
-
-            // Load photos
-            const photos = await API.get('/api/photos');
-            this.progressPhotos = photos || [];
-
-            // Update UI
+            
             this.init();
         } catch (error) {
-            console.log('API load failed, using localStorage:', error);
+            console.log('Supabase load failed, using localStorage:', error);
             this.loadFromLocalStorage();
             this.init();
         }
@@ -291,7 +304,7 @@ class SmartTrainerPro {
     loadFromLocalStorage() {
         this.dailyMeals = JSON.parse(localStorage.getItem('dailyMeals')) || [];
         this.waterData = JSON.parse(localStorage.getItem('waterData')) || { today: 0, history: {}, target: 8, date: new Date().toISOString().split('T')[0] };
-        this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000 };
+        this.userProfile = JSON.parse(localStorage.getItem('userProfile')) || { name: '', age: '', height: '', weight: '', targetCalories: 2000, weightHistory: [] };
         this.vitalsData = JSON.parse(localStorage.getItem('vitalsData')) || [];
         this.progressPhotos = JSON.parse(localStorage.getItem('progressPhotos')) || [];
     }
@@ -306,7 +319,7 @@ class SmartTrainerPro {
         if (this.isGuestMode) return;
 
         try {
-            switch(key) {
+            switch (key) {
                 case 'dailyMeals':
                     // Already handled in add/delete functions
                     break;
@@ -338,6 +351,7 @@ class SmartTrainerPro {
         this.updateHomeSummary();
         this.loadProfile();
         this.renderPhotoTimeline();
+        this.initCharts();
         console.log('🚀 Gym Pro Ready!');
     }
 
@@ -408,7 +422,7 @@ class SmartTrainerPro {
             tab.onclick = (e) => {
                 document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
                 e.target.classList.add('active');
-                
+
                 const tabName = e.target.dataset.tab;
                 document.getElementById('loginForm').style.display = tabName === 'login' ? 'flex' : 'none';
                 document.getElementById('registerFormModal').style.display = tabName === 'register' ? 'flex' : 'none';
@@ -433,7 +447,7 @@ class SmartTrainerPro {
     showSection(sectionId) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        
+
         document.getElementById(sectionId).classList.add('active');
         document.querySelector(`[data-section="${sectionId}"]`)?.classList.add('active');
     }
@@ -553,7 +567,7 @@ class SmartTrainerPro {
                     // Try API first
                     const base64Image = imageData.split(',')[1];
                     const data = await API.post('/api/analyze-food', { image: base64Image });
-                    
+
                     if (data.foods && data.foods.length > 0) {
                         this.processFoodAnalysis(data.foods, data.totals, imageData);
                         return;
@@ -572,9 +586,9 @@ class SmartTrainerPro {
 
     processFoodAnalysis(foods, totals, imageData) {
         const box = document.getElementById('uploadBox');
-        
+
         const emoji = { front: '📷', side: '📸', back: '📸' };
-        
+
         box.innerHTML = `
             <div style="text-align:center;">
                 <img src="${imageData}" style="width:120px; height:120px; object-fit:cover; border-radius:15px; margin-bottom:15px;">
@@ -611,14 +625,14 @@ class SmartTrainerPro {
         const foods = [
             { name: 'وجبة', calories: 250, protein: 15, carbs: 30, fat: 8 }
         ];
-        
+
         this.processFoodAnalysis(foods, { calories: 250, protein: 15 }, imageData);
     }
 
     renderDailyLog() {
         const list = document.getElementById('mealsList');
         const today = new Date().toISOString().split('T')[0];
-        
+
         let meals;
         if (this.isGuestMode || !this.isAuthenticated) {
             meals = this.dailyMeals.filter(m => m.date === today);
@@ -626,27 +640,27 @@ class SmartTrainerPro {
             // API mode - show all meals
             meals = this.dailyMeals;
         }
-        
+
         list.innerHTML = meals.map(m => `
             <div class="meal-item" style="display:flex; justify-content:space-between; background:rgba(255,255,255,0.05); padding:12px; border-radius:10px; margin-bottom:8px;">
                 <span>${m.name}</span>
                 <span style="color:#aaa; font-size:0.85rem;">${m.calories} سعرة | ${m.protein}g بروتين${m.carbs ? ' | ' + m.carbs + 'g كربو' : ''}${m.fat ? ' | ' + m.fat + 'g دهن' : ''}</span>
             </div>
         `).join('') || '<p style="opacity:0.5; text-align:center;">لا وجبات</p>';
-        
+
         this.updateDailySummary();
     }
 
     updateDailySummary() {
         const today = new Date().toISOString().split('T')[0];
         let meals;
-        
+
         if (this.isGuestMode || !this.isAuthenticated) {
             meals = this.dailyMeals.filter(m => m.date === today);
         } else {
             meals = this.dailyMeals;
         }
-        
+
         document.getElementById('totalCalories').textContent = meals.reduce((a, b) => a + b.calories, 0);
         document.getElementById('totalProtein').textContent = meals.reduce((a, b) => a + (b.protein || 0), 0) + 'g';
         this.updateHomeSummary();
@@ -704,13 +718,13 @@ class SmartTrainerPro {
                     const formData = new FormData();
                     formData.append('photo', new Blob([this.base64ToArrayBuffer(imageData)], { type: 'file.type' }));
                     formData.append('type', photoType);
-                    
+
                     const response = await fetch(`${CONFIG.API_URL}/api/photos`, {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${this.token}` },
                         body: formData
                     });
-                    
+
                     if (response.ok) {
                         const data = await response.json();
                         this.progressPhotos.unshift(data.photo);
@@ -812,10 +826,10 @@ class SmartTrainerPro {
             { t: 'النوم العميق', d: 'يفرز الجسم هرمون النمو أثناء النوم العميق ليلاً.', c: '😴' },
             { t: 'التوازن الغذائي', d: 'احصل على توازن بين البروتين والكربوهيدرات والدهون.', c: '⚖️' }
         ];
-        
+
         const container = document.getElementById('articlesList');
         if (!container) return;
-        
+
         container.innerHTML = articles.map(a => `
             <div class="summary-card" style="flex-direction:column; align-items:flex-start;">
                 <div style="font-size:2rem; margin-bottom:10px;">${a.c}</div>
@@ -841,10 +855,23 @@ class SmartTrainerPro {
         const height = document.getElementById('userHeight').value;
         const weight = document.getElementById('userWeight').value;
 
+        const oldWeight = this.userProfile.weight;
+
         this.userProfile = {
             ...this.userProfile,
             name, age, height, weight
         };
+
+        // Add to history if weight changed or history empty
+        if (weight && weight !== oldWeight) {
+            if (!this.userProfile.weightHistory) this.userProfile.weightHistory = [];
+            this.userProfile.weightHistory.push({
+                weight: parseFloat(weight),
+                date: new Date().toISOString().split('T')[0]
+            });
+            // Keep only last 10 entries
+            if (this.userProfile.weightHistory.length > 10) this.userProfile.weightHistory.shift();
+        }
 
         this.saveData('userProfile', this.userProfile);
         alert('✅ تم حفظ البيانات!');
@@ -883,9 +910,9 @@ class SmartTrainerPro {
     // ============================================
     updateHomeSummary() {
         const today = new Date().toISOString().split('T')[0];
-        
+
         // Water
-        document.getElementById('homeWater').textContent = 
+        document.getElementById('homeWater').textContent =
             `${this.waterData.today}/${this.waterData.target} أكواب`;
 
         // Calories
@@ -899,6 +926,9 @@ class SmartTrainerPro {
 
         // Sleep (placeholder)
         document.getElementById('homeSleep').textContent = '-- ساعات';
+
+        // Update Charts
+        this.updateCharts();
     }
 
     // ============================================
@@ -907,7 +937,7 @@ class SmartTrainerPro {
     toggleGPS() {
         const startBtn = document.getElementById('startTrackingBtn');
         const stopBtn = document.getElementById('stopTrackingBtn');
-        
+
         if (startBtn.style.display !== 'none') {
             startBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
@@ -916,6 +946,184 @@ class SmartTrainerPro {
             startBtn.style.display = 'inline-block';
             stopBtn.style.display = 'none';
             alert('⏹️ تم إيقاف التتبع');
+        }
+    }
+
+    // ============================================
+    // Chart.js Implementations
+    // ============================================
+    initCharts() {
+        const ctxWeight = document.getElementById('weightProgressChart')?.getContext('2d');
+        const ctxCalories = document.getElementById('caloriesChart')?.getContext('2d');
+
+        if (ctxWeight) {
+            this.charts.weight = new Chart(ctxWeight, {
+                type: 'line',
+                data: {
+                    labels: ['الأسبوع 1', 'الأسبوع 2', 'الأسبوع 3', 'الأسبوع 4'],
+                    datasets: [{
+                        label: 'الوزن (كجم)',
+                        data: [this.userProfile.weight || 80, (this.userProfile.weight || 80) - 0.5, (this.userProfile.weight || 80) - 1.2, (this.userProfile.weight || 80) - 1.5],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#3b82f6',
+                        pointBorderColor: '#fff',
+                        pointRadius: 5
+                    }]
+                },
+                options: this.getChartOptions()
+            });
+        }
+
+        if (ctxCalories) {
+            this.charts.calories = new Chart(ctxCalories, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'السعرات المستهلكة',
+                        data: [],
+                        backgroundColor: '#10b981',
+                        borderRadius: 8,
+                    }]
+                },
+                options: this.getChartOptions()
+            });
+        }
+
+        const ctxWater = document.getElementById('waterHistoryChart')?.getContext('2d');
+        if (ctxWater) {
+            this.charts.water = new Chart(ctxWater, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'أكواب الماء',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        fill: true,
+                        tension: 0.4,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#3b82f6'
+                    }]
+                },
+                options: this.getChartOptions()
+            });
+        }
+
+        const ctxBP = document.getElementById('bpChart')?.getContext('2d');
+        if (ctxBP) {
+            this.charts.vitals = new Chart(ctxBP, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'انقباضي', data: [], borderColor: '#ef4444', tension: 0.3 },
+                        { label: 'انبساطي', data: [], borderColor: '#3b82f6', tension: 0.3 }
+                    ]
+                },
+                options: this.getChartOptions()
+            });
+        }
+
+        this.updateCharts();
+    }
+
+    getChartOptions() {
+        return {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    titleFont: { family: 'Cairo' },
+                    bodyFont: { family: 'Cairo' }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    ticks: { color: '#94a3b8', font: { family: 'Cairo' } }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#94a3b8', font: { family: 'Cairo' } }
+                }
+            }
+        };
+    }
+
+    updateCharts() {
+        if (this.charts.calories) {
+            const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+            const last7Days = [];
+            const data = [];
+
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const dateStr = d.toISOString().split('T')[0];
+                last7Days.push(days[d.getDay()]);
+
+                const dayCalories = this.dailyMeals
+                    .filter(m => m.date === dateStr)
+                    .reduce((sum, m) => sum + m.calories, 0);
+                data.push(dayCalories);
+            }
+
+            this.charts.calories.data.labels = last7Days;
+            this.charts.calories.data.datasets[0].data = data;
+            this.charts.calories.update();
+        }
+
+        // Water History Chart
+        if (this.charts.water) {
+            const days = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+            const last7Days = [];
+            const data = [];
+
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const dateStr = d.toISOString().split('T')[0];
+                last7Days.push(days[d.getDay()]);
+
+                const dayWater = this.waterData.history[dateStr] || 0;
+                data.push(dayWater);
+            }
+
+            this.charts.water.data.labels = last7Days;
+            this.charts.water.data.datasets[0].data = data;
+            this.charts.water.update();
+        }
+
+        // Vitals Chart
+        if (this.charts.vitals && this.vitalsData.length > 0) {
+            const history = this.vitalsData.slice(-7); // Last 10 readings
+            this.charts.vitals.data.labels = history.map(v => new Date(v.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'numeric' }));
+            this.charts.vitals.data.datasets[0].data = history.map(v => v.systolic);
+            this.charts.vitals.data.datasets[1].data = history.map(v => v.diastolic);
+            this.charts.vitals.update();
+        }
+
+        // For Weight
+        if (this.charts.weight && this.userProfile.weightHistory && this.userProfile.weightHistory.length > 0) {
+            const history = this.userProfile.weightHistory;
+            this.charts.weight.data.labels = history.map(h => h.date);
+            this.charts.weight.data.datasets[0].data = history.map(h => h.weight);
+            this.charts.weight.update();
+        } else if (this.charts.weight) {
+            this.charts.weight.update();
         }
     }
 }
@@ -932,17 +1140,17 @@ async function registerUser() {
     const name = document.getElementById('registerNameModal').value;
     const email = document.getElementById('registerEmailModal').value;
     const password = document.getElementById('registerPasswordModal').value;
-    
+
     if (!email || !password) {
         alert('الرجاء إدخال البريد الإلكتروني وكلمة المرور');
         return;
     }
-    
+
     if (password.length < 6) {
         alert('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
         return;
     }
-    
+
     if (window.app) {
         await window.app.handleRegister(name, email, password);
     }
