@@ -95,7 +95,31 @@ class SmartTrainerPro {
     // ============================================
     // Authentication
     // ============================================
-    checkAuth() {
+    async checkAuth() {
+        // Check for Google OAuth callback
+        const { data: { session } } = await this.supabase.auth.getSession();
+        
+        if (session && session.user) {
+            // User is logged in via Supabase (Google or email)
+            this.user = {
+                id: session.user.id,
+                email: session.user.email,
+                name: session.user.user_metadata?.name || session.user.email.split('@')[0]
+            };
+            
+            localStorage.setItem('userData', JSON.stringify(this.user));
+            
+            // Create profile if not exists
+            await this.ensureProfile(session.user.id);
+            
+            this.isAuthenticated = true;
+            this.isGuestMode = false;
+            this.showApp();
+            this.loadAllData();
+            return;
+        }
+        
+        // Check localStorage for existing session
         const token = localStorage.getItem('authToken');
         const user = localStorage.getItem('userData');
 
@@ -108,6 +132,28 @@ class SmartTrainerPro {
             this.loadAllData();
         } else {
             this.showAuthModal();
+        }
+    }
+
+    async ensureProfile(userId) {
+        try {
+            const { data: existingProfile } = await this.supabase
+                .from('profile')
+                .select('id')
+                .eq('user_id', userId)
+                .single();
+
+            if (!existingProfile) {
+                // Create profile
+                await this.supabase.from('profile').insert([{
+                    user_id: userId,
+                    name: this.user.name,
+                    target_calories: 2000,
+                    target_water: 8
+                }]);
+            }
+        } catch (error) {
+            console.log('Profile check error:', error);
         }
     }
 
@@ -160,6 +206,25 @@ class SmartTrainerPro {
         } catch (error) {
             console.error('Login error:', error);
             this.showAuthError(error.message || 'فشل تسجيل الدخول');
+        }
+    }
+
+    async handleGoogleLogin() {
+        try {
+            const { data, error } = await this.supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: window.location.origin + '/index.html'
+                }
+            });
+
+            if (error) throw error;
+            
+            // The user will be redirected to Google, then back to the app
+            // The session will be handled in checkAuth after redirect
+        } catch (error) {
+            console.error('Google login error:', error);
+            this.showAuthError(error.message || 'فشل تسجيل الدخول بـ Google');
         }
     }
 
@@ -436,6 +501,12 @@ class SmartTrainerPro {
             const password = document.getElementById('loginPassword').value;
             await this.handleLogin(email, password);
         };
+
+        // Google login button
+        const googleBtn = document.getElementById('googleLoginBtn');
+        if (googleBtn) {
+            googleBtn.onclick = () => this.handleGoogleLogin();
+        }
 
         // Guest button
         document.getElementById('guestBtn').onclick = () => this.handleGuestLogin();
